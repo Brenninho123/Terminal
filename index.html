@@ -1,51 +1,161 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>HTML Terminal</title>
+<title>HTML Terminal Simulator</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 body {
     margin: 0;
-    background: #000;
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
     color: #00ff00;
-    font-family: monospace;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    height: 100vh;
+    overflow: hidden;
 }
 
 #terminal {
-    padding: 10px;
+    padding: 20px;
     height: 100vh;
     overflow-y: auto;
     box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #333;
+    color: #4CAF50;
+}
+
+.header h1 {
+    margin: 0 0 5px 0;
+    font-size: 1.5rem;
+}
+
+.header p {
+    margin: 0;
+    color: #aaa;
+    font-size: 0.9rem;
 }
 
 .line {
     display: flex;
     white-space: pre-wrap;
+    margin-bottom: 5px;
+    align-items: flex-start;
 }
 
 .prompt {
-    margin-right: 6px;
+    margin-right: 10px;
+    white-space: nowrap;
+    color: #4CAF50;
+    font-weight: bold;
+    user-select: none;
 }
 
 .input {
     background: none;
     border: none;
     outline: none;
-    color: inherit;
+    color: #f0f0f0;
     font-family: inherit;
     flex: 1;
+    font-size: 1rem;
+}
+
+.output {
+    color: #f0f0f0;
+    margin-left: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.error {
+    color: #ff5555;
+}
+
+.success {
+    color: #55ff55;
+}
+
+.info {
+    color: #5555ff;
+}
+
+.warning {
+    color: #ffaa00;
+}
+
+.dir {
+    color: #87ceeb;
+}
+
+.file {
+    color: #f0f0f0;
+}
+
+.executable {
+    color: #00ff00;
+}
+
+.lib {
+    color: #ff79c6;
+}
+
+.terminal-output {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+::-webkit-scrollbar-thumb {
+    background: #4CAF50;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #45a049;
+}
+
+/* Blinking cursor effect */
+.input::after {
+    content: '_';
+    animation: blink 1s infinite;
+    color: #4CAF50;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
 }
 </style>
 </head>
 
 <body>
-<div id="terminal"></div>
+<div id="terminal">
+    <div class="header">
+        <h1>HTML Terminal Simulator</h1>
+        <p>Haxelib simulation loaded. Type 'help' for available commands.</p>
+    </div>
+    <div class="terminal-output" id="terminal-output"></div>
+</div>
 
 <script>
 // ================== STATE ==================
-const terminal = document.getElementById("terminal");
+const terminalOutput = document.getElementById("terminal-output");
 
 let history = [];
 let historyIndex = 0;
@@ -53,203 +163,545 @@ let cwd = "/home/user";
 
 // ---------------- FILESYSTEM ----------------
 let fs = JSON.parse(localStorage.getItem("fs")) || {
-    "/": ["home", "libs"],
-    "/home": ["user"],
-    "/home/user": ["main.hx", "project.xml"],
-    "/libs": []
+    "/": { type: "dir", children: ["home", "libs", "etc"] },
+    "/home": { type: "dir", children: ["user"] },
+    "/home/user": { 
+        type: "dir", 
+        children: ["main.hx", "project.xml", "README.md", "src"] 
+    },
+    "/home/user/src": { 
+        type: "dir", 
+        children: ["Main.hx", "Utils.hx"] 
+    },
+    "/libs": { type: "dir", children: [] },
+    "/etc": { type: "dir", children: ["version.txt"] },
+    "/home/user/main.hx": { type: "file", content: "// Haxe main file\nclass Main {\n  static function main() {\n    trace('Hello from HTML Terminal!');\n  }\n}" },
+    "/home/user/project.xml": { type: "file", content: "<project>\n  <app main=\"Main\" />\n  <haxelib name=\"hxcpp\" />\n</project>" },
+    "/home/user/README.md": { type: "file", content: "# My Haxe Project\n\nThis is a sample project for the HTML terminal." },
+    "/home/user/src/Main.hx": { type: "file", content: "class Main {\n  public static function main() {\n    trace('Hello World!');\n  }\n}" },
+    "/home/user/src/Utils.hx": { type: "file", content: "class Utils {\n  public static function log(msg:String) {\n    trace('[LOG] ' + msg);\n  }\n}" },
+    "/etc/version.txt": { type: "file", content: "HTML Terminal v2.0" }
 };
 
-let haxelib = JSON.parse(localStorage.getItem("haxelib")) || [];
+let haxelib = JSON.parse(localStorage.getItem("haxelib")) || [
+    { name: "hxcpp", version: "4.2.1" },
+    { name: "heaps", version: "1.9.0" }
+];
+
+// Sample library database for search
+const libDatabase = [
+    { name: "hxcpp", version: "4.2.1", desc: "Haxe C++ Runtime Support" },
+    { name: "heaps", version: "1.9.0", desc: "GPU Based 2D/3D Framework" },
+    { name: "haxeui", version: "1.0.5", desc: "Cross-platform UI framework" },
+    { name: "openfl", version: "9.1.0", desc: "Open Flash Library for Haxe" },
+    { name: "flixel", version: "4.10.0", desc: "Free 2D game engine" },
+    { name: "kha", version: "17.1.2", desc: "Ultra-portable, high performance framework" },
+    { name: "format", version: "3.5.0", desc: "File format support for Haxe" },
+    { name: "tink_core", version: "2.0.2", desc: "Tinkerbell Core Library" }
+];
 
 function save() {
     localStorage.setItem("fs", JSON.stringify(fs));
     localStorage.setItem("haxelib", JSON.stringify(haxelib));
 }
 
-// ================== TERMINAL ==================
-function print(text = "") {
+// ================== TERMINAL FUNCTIONS ==================
+function print(text = "", className = "") {
     const div = document.createElement("div");
     div.textContent = text;
-    terminal.appendChild(div);
-    terminal.scrollTop = terminal.scrollHeight;
+    if (className) div.className = className;
+    terminalOutput.appendChild(div);
+    terminalOutput.scrollTop = terminalOutput.scrollHeight;
 }
 
 function promptText() {
-    return `user@html:${cwd}$`;
+    const path = cwd === "/home/user" ? "~" : cwd.replace("/home/user", "~");
+    return `user@html-terminal:${path}$`;
 }
 
 function newLine() {
     const line = document.createElement("div");
     line.className = "line";
-
+    
     const prompt = document.createElement("span");
     prompt.className = "prompt";
     prompt.textContent = promptText();
-
+    
     const input = document.createElement("input");
     input.className = "input";
-
+    input.spellcheck = false;
+    
     line.append(prompt, input);
-    terminal.appendChild(line);
+    terminalOutput.appendChild(line);
     input.focus();
-
+    
     input.addEventListener("keydown", e => {
         if (e.key === "Enter") {
             const cmd = input.value.trim();
-            history.push(cmd);
-            historyIndex = history.length;
+            if (cmd) {
+                history.push(cmd);
+                historyIndex = history.length;
+            }
             input.disabled = true;
             runCommand(cmd);
             newLine();
         }
-
+        
         if (e.key === "ArrowUp") {
+            e.preventDefault();
             if (historyIndex > 0) historyIndex--;
             input.value = history[historyIndex] || "";
         }
-
+        
         if (e.key === "ArrowDown") {
+            e.preventDefault();
             if (historyIndex < history.length) historyIndex++;
             input.value = history[historyIndex] || "";
+            if (historyIndex === history.length) input.value = "";
+        }
+        
+        if (e.key === "Tab") {
+            e.preventDefault();
+            // Simple tab completion for commands
+            const commands = ["help", "clear", "ls", "cd", "pwd", "echo", "date", "whoami", "haxelib", "cat", "mkdir", "rmdir", "touch"];
+            const currentText = input.value;
+            const matches = commands.filter(cmd => cmd.startsWith(currentText));
+            if (matches.length === 1) {
+                input.value = matches[0];
+            }
         }
     });
-
-    terminal.scrollTop = terminal.scrollHeight;
+    
+    terminalOutput.scrollTop = terminalOutput.scrollHeight;
 }
 
-// ================== COMMANDS ==================
+// ================== COMMAND HANDLERS ==================
 function runCommand(cmd) {
     if (!cmd) return;
-
+    
     const args = cmd.split(" ");
     const base = args[0];
-
+    
     switch (base) {
         case "help":
-            print("Comandos disponíveis:");
-            print("help clear ls cd pwd echo date whoami");
-            print("haxelib install <lib>");
-            print("haxelib list");
-            print("haxelib remove <lib>");
-            print("haxelib search <lib>");
+            print("Available commands:", "info");
+            print("  help      - Show this help message");
+            print("  clear     - Clear terminal screen");
+            print("  ls        - List directory contents");
+            print("  cd <dir>  - Change directory");
+            print("  pwd       - Print working directory");
+            print("  echo <text> - Print text");
+            print("  date      - Show current date and time");
+            print("  whoami    - Show current user");
+            print("  cat <file> - Display file contents");
+            print("  mkdir <dir> - Create a directory");
+            print("  rmdir <dir> - Remove a directory");
+            print("  touch <file> - Create an empty file");
+            print("");
+            print("Haxelib commands:", "info");
+            print("  haxelib install <library> - Install a library");
+            print("  haxelib list             - List installed libraries");
+            print("  haxelib remove <library> - Remove a library");
+            print("  haxelib search <library> - Search for libraries");
+            print("  haxelib info <library>   - Show library information");
             break;
-
+            
         case "clear":
-            terminal.innerHTML = "";
+            terminalOutput.innerHTML = "";
             break;
-
+            
         case "ls":
-            print((fs[cwd] || []).join("  "));
+            listDirectory();
             break;
-
+            
         case "cd":
             changeDir(args[1]);
             break;
-
+            
         case "pwd":
-            print(cwd);
+            print(cwd, "info");
             break;
-
+            
         case "echo":
             print(args.slice(1).join(" "));
             break;
-
+            
         case "date":
-            print(new Date().toString());
+            print(new Date().toString(), "info");
             break;
-
+            
         case "whoami":
-            print("user");
+            print("user", "info");
             break;
-
+            
+        case "cat":
+            if (!args[1]) {
+                print("Usage: cat <filename>", "error");
+            } else {
+                catFile(args[1]);
+            }
+            break;
+            
+        case "mkdir":
+            if (!args[1]) {
+                print("Usage: mkdir <directory>", "error");
+            } else {
+                makeDirectory(args[1]);
+            }
+            break;
+            
+        case "rmdir":
+            if (!args[1]) {
+                print("Usage: rmdir <directory>", "error");
+            } else {
+                removeDirectory(args[1]);
+            }
+            break;
+            
+        case "touch":
+            if (!args[1]) {
+                print("Usage: touch <filename>", "error");
+            } else {
+                createFile(args[1]);
+            }
+            break;
+            
         case "haxelib":
             handleHaxelib(args);
             break;
-
+            
         default:
-            print(`comando não encontrado: ${base}`);
+            print(`Command not found: ${base}`, "error");
+            print("Type 'help' for available commands.", "info");
     }
 }
 
-// ================== CD ==================
+// ================== FILESYSTEM COMMANDS ==================
+function listDirectory() {
+    const dir = fs[cwd];
+    if (!dir || dir.type !== "dir") {
+        print(`Cannot access '${cwd}': No such directory`, "error");
+        return;
+    }
+    
+    const items = dir.children || [];
+    if (items.length === 0) {
+        print("(empty directory)", "info");
+        return;
+    }
+    
+    // Group by type for better display
+    const dirs = [];
+    const files = [];
+    const libs = [];
+    
+    items.forEach(item => {
+        const path = cwd === "/" ? `/${item}` : `${cwd}/${item}`;
+        const itemData = fs[path];
+        
+        if (!itemData) {
+            files.push(item); // Assume file if not in fs
+        } else if (itemData.type === "dir") {
+            dirs.push(item);
+        } else if (item.startsWith("lib_")) {
+            libs.push(item);
+        } else {
+            files.push(item);
+        }
+    });
+    
+    // Display directories
+    dirs.forEach(dir => print(dir + "/", "dir"));
+    
+    // Display files
+    files.forEach(file => {
+        const className = file.endsWith(".hx") || file.endsWith(".exe") ? "executable" : "file";
+        print(file, className);
+    });
+    
+    // Display libraries
+    libs.forEach(lib => print(lib, "lib"));
+}
+
 function changeDir(path) {
     if (!path || path === "~") {
         cwd = "/home/user";
         return;
     }
-
+    
+    if (path === "-") {
+        // Would be nice to implement directory stack
+        print("Directory stack not implemented", "warning");
+        return;
+    }
+    
     if (path === "..") {
         if (cwd !== "/") {
             cwd = cwd.split("/").slice(0, -1).join("/") || "/";
         }
         return;
     }
-
-    const newPath = path.startsWith("/")
-        ? path
-        : cwd + "/" + path;
-
-    if (fs[newPath]) {
+    
+    const newPath = path.startsWith("/") 
+        ? path 
+        : cwd === "/" ? `/${path}` : `${cwd}/${path}`;
+    
+    if (fs[newPath] && fs[newPath].type === "dir") {
         cwd = newPath;
     } else {
-        print(`cd: diretório não encontrado: ${path}`);
+        print(`cd: no such directory: ${path}`, "error");
     }
 }
 
-// ================== HAXELIB ==================
+function catFile(filename) {
+    const filePath = filename.startsWith("/") 
+        ? filename 
+        : cwd === "/" ? `/${filename}` : `${cwd}/${filename}`;
+    
+    if (!fs[filePath]) {
+        print(`cat: ${filename}: No such file`, "error");
+        return;
+    }
+    
+    if (fs[filePath].type !== "file") {
+        print(`cat: ${filename}: Is a directory`, "error");
+        return;
+    }
+    
+    print(`=== Contents of ${filename} ===`, "info");
+    print(fs[filePath].content || "(empty file)");
+    print(`=== End of file ===`, "info");
+}
+
+function makeDirectory(dirname) {
+    const dirPath = cwd === "/" ? `/${dirname}` : `${cwd}/${dirname}`;
+    
+    if (fs[dirPath]) {
+        print(`mkdir: cannot create directory '${dirname}': File exists`, "error");
+        return;
+    }
+    
+    // Add to filesystem
+    fs[dirPath] = { type: "dir", children: [] };
+    
+    // Add to parent directory
+    const parent = cwd;
+    if (!fs[parent].children) fs[parent].children = [];
+    fs[parent].children.push(dirname);
+    
+    save();
+    print(`Directory '${dirname}' created successfully.`, "success");
+}
+
+function removeDirectory(dirname) {
+    const dirPath = cwd === "/" ? `/${dirname}` : `${cwd}/${dirname}`;
+    
+    if (!fs[dirPath]) {
+        print(`rmdir: failed to remove '${dirname}': No such directory`, "error");
+        return;
+    }
+    
+    if (fs[dirPath].type !== "dir") {
+        print(`rmdir: failed to remove '${dirname}': Not a directory`, "error");
+        return;
+    }
+    
+    if (fs[dirPath].children && fs[dirPath].children.length > 0) {
+        print(`rmdir: failed to remove '${dirname}': Directory not empty`, "error");
+        return;
+    }
+    
+    // Remove from parent directory
+    const parent = cwd;
+    fs[parent].children = fs[parent].children.filter(item => item !== dirname);
+    
+    // Remove from filesystem
+    delete fs[dirPath];
+    
+    save();
+    print(`Directory '${dirname}' removed successfully.`, "success");
+}
+
+function createFile(filename) {
+    const filePath = cwd === "/" ? `/${filename}` : `${cwd}/${filename}`;
+    
+    if (fs[filePath]) {
+        print(`touch: cannot create file '${filename}': File exists`, "error");
+        return;
+    }
+    
+    // Add to filesystem
+    fs[filePath] = { type: "file", content: "" };
+    
+    // Add to parent directory
+    const parent = cwd;
+    if (!fs[parent].children) fs[parent].children = [];
+    fs[parent].children.push(filename);
+    
+    save();
+    print(`File '${filename}' created successfully.`, "success");
+}
+
+// ================== HAXELIB COMMANDS ==================
 function handleHaxelib(args) {
     const action = args[1];
     const lib = args[2];
-
+    
     if (!action) {
-        print("Uso: haxelib <install|list|remove|search>");
+        print("Usage: haxelib <install|list|remove|search|info>", "error");
         return;
     }
-
+    
     switch (action) {
         case "install":
-            if (!lib) return print("Informe o nome da lib.");
-            if (haxelib.includes(lib))
-                return print(`${lib} já está instalada.`);
-
-            haxelib.push(lib);
-            fs["/libs"].push(lib);
+            if (!lib) {
+                print("Please specify a library name.", "error");
+                print("Usage: haxelib install <library>", "info");
+                return;
+            }
+            
+            // Check if already installed
+            if (haxelib.find(l => l.name === lib)) {
+                print(`Library '${lib}' is already installed.`, "warning");
+                return;
+            }
+            
+            // Find in database
+            const libInfo = libDatabase.find(l => l.name === lib);
+            if (!libInfo) {
+                print(`Library '${lib}' not found in database.`, "error");
+                print("Try 'haxelib search' to find available libraries.", "info");
+                return;
+            }
+            
+            // Install library
+            haxelib.push({ name: lib, version: libInfo.version });
+            fs["/libs"].push(`lib_${lib}`);
             save();
-            print(`Instalando ${lib}...`);
-            print(`${lib} instalado.`);
+            
+            print(`Installing ${lib} ${libInfo.version}...`, "info");
+            setTimeout(() => {
+                print(`  Downloading ${lib}-${libInfo.version}.zip...`, "info");
+                setTimeout(() => {
+                    print(`  Unpacking ${lib}-${libInfo.version}.zip...`, "info");
+                    setTimeout(() => {
+                        print(`  Running build.hxml...`, "info");
+                        setTimeout(() => {
+                            print(`  Installation complete.`, "success");
+                            print(`${lib} ${libInfo.version} is now installed.`, "success");
+                        }, 300);
+                    }, 300);
+                }, 300);
+            }, 300);
             break;
-
+            
         case "list":
-            if (!haxelib.length) return print("Nenhuma lib instalada.");
-            haxelib.forEach(l => print(l));
+            if (haxelib.length === 0) {
+                print("No libraries installed.", "info");
+                return;
+            }
+            
+            print("Installed libraries:", "info");
+            haxelib.forEach(lib => {
+                print(`  ${lib.name} [${lib.version}]`, "lib");
+            });
             break;
-
+            
         case "remove":
-            if (!lib) return print("Informe o nome da lib.");
-            if (!haxelib.includes(lib))
-                return print(`${lib} não está instalada.`);
-
-            haxelib = haxelib.filter(l => l !== lib);
-            fs["/libs"] = fs["/libs"].filter(l => l !== lib);
+            if (!lib) {
+                print("Please specify a library name.", "error");
+                print("Usage: haxelib remove <library>", "info");
+                return;
+            }
+            
+            const libIndex = haxelib.findIndex(l => l.name === lib);
+            if (libIndex === -1) {
+                print(`Library '${lib}' is not installed.`, "error");
+                return;
+            }
+            
+            // Remove library
+            haxelib.splice(libIndex, 1);
+            fs["/libs"] = fs["/libs"].filter(item => item !== `lib_${lib}`);
             save();
-            print(`${lib} removida.`);
+            
+            print(`Removing ${lib}...`, "info");
+            setTimeout(() => {
+                print(`Library '${lib}' removed successfully.`, "success");
+            }, 300);
             break;
-
+            
         case "search":
-            if (!lib) return print("Informe o nome da lib.");
-            print(`Encontrado: ${lib}`);
+            if (!lib) {
+                print("Please specify a search term.", "error");
+                print("Usage: haxelib search <term>", "info");
+                return;
+            }
+            
+            const results = libDatabase.filter(l => 
+                l.name.includes(lib) || l.desc.toLowerCase().includes(lib.toLowerCase())
+            );
+            
+            if (results.length === 0) {
+                print(`No libraries found matching '${lib}'`, "info");
+                return;
+            }
+            
+            print(`Search results for '${lib}':`, "info");
+            results.forEach(result => {
+                print(`  ${result.name} [${result.version}] - ${result.desc}`, "lib");
+            });
             break;
-
+            
+        case "info":
+            if (!lib) {
+                print("Please specify a library name.", "error");
+                print("Usage: haxelib info <library>", "info");
+                return;
+            }
+            
+            const info = libDatabase.find(l => l.name === lib);
+            if (!info) {
+                print(`Library '${lib}' not found in database.`, "error");
+                return;
+            }
+            
+            const installed = haxelib.find(l => l.name === lib);
+            
+            print(`Information for ${lib}:`, "info");
+            print(`  Name: ${info.name}`, "info");
+            print(`  Version: ${info.version}`, "info");
+            print(`  Description: ${info.desc}`, "info");
+            print(`  Status: ${installed ? `Installed (${installed.version})` : "Not installed"}`, 
+                  installed ? "success" : "warning");
+            break;
+            
         default:
-            print("Comando haxelib inválido.");
+            print(`Invalid haxelib command: ${action}`, "error");
+            print("Valid commands: install, list, remove, search, info", "info");
     }
 }
 
-// ================== START ==================
-print("HTML Terminal Sandbox");
-print("Haxelib fake carregado");
-print("Digite 'help'");
-newLine();
+// ================== INITIALIZATION ==================
+function init() {
+    print("HTML Terminal Simulator v2.0", "success");
+    print("Type 'help' for available commands", "info");
+    print("----------------------------------------", "info");
+    
+    // Load initial haxelib entries into filesystem
+    haxelib.forEach(lib => {
+        if (!fs["/libs"].includes(`lib_${lib.name}`)) {
+            fs["/libs"].push(`lib_${lib.name}`);
+        }
+    });
+    
+    save();
+    
+    newLine();
+}
+
+// Start the terminal
+init();
 </script>
 </body>
 </html>
